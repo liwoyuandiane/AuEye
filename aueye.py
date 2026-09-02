@@ -270,15 +270,17 @@ class SettingsWindow(tk.Toplevel):
         ttk.Label(frame, text="收件人地址").grid(row=3, column=0, sticky="w", pady=(10, 0))
         self.var_email_receiver = tk.StringVar(value=self.app.email_receiver)
         ttk.Entry(frame, textvariable=self.var_email_receiver, width=36).grid(row=3, column=1, columnspan=3, sticky="we", padx=(10, 0), pady=(10, 0))
-        ttk.Separator(frame).grid(row=4, column=0, columnspan=2, sticky="we", pady=14)
+        ttk.Separator(frame).grid(row=4, column=0, columnspan=3, sticky="we", pady=14)
         ttk.Label(frame, text="SMTP 服务器").grid(row=5, column=0, sticky="w")
         self.var_smtp_host = tk.StringVar(value=self.app.smtp_host)
-        ttk.Entry(frame, textvariable=self.var_smtp_host, width=26).grid(row=5, column=1, columnspan=2, sticky="we", padx=(10, 4), pady=(2, 2))
-        ttk.Label(frame, text="端口").grid(row=5, column=3, sticky="w")
+        ttk.Entry(frame, textvariable=self.var_smtp_host).grid(row=5, column=1, columnspan=2, sticky="we", padx=(10, 0), pady=(2, 2))
+
+        ttk.Label(frame, text="端口").grid(row=6, column=0, sticky="w", pady=(6, 0))
         self.var_smtp_port = tk.StringVar(value=str(self.app.smtp_port))
-        ttk.Entry(frame, textvariable=self.var_smtp_port, width=8).grid(row=5, column=4, sticky="w", padx=(6, 0), pady=(2, 2))
+        ttk.Entry(frame, textvariable=self.var_smtp_port, width=10).grid(row=6, column=1, sticky="w", padx=(10, 0), pady=(6, 0))
+
         self.var_smtp_ssl = tk.BooleanVar(value=self.app.smtp_ssl)
-        ttk.Checkbutton(frame, text="SSL", variable=self.var_smtp_ssl).grid(row=6, column=0, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(frame, text="SSL 加密", variable=self.var_smtp_ssl).grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         ttk.Separator(frame).grid(row=7, column=0, columnspan=4, sticky="we", pady=10)
         ttk.Label(frame, text="邮件提醒间隔（分钟）").grid(row=8, column=0, sticky="w", pady=(4, 0))

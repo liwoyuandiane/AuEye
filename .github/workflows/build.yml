@@ -42,7 +42,6 @@ jobs:
         run: |
           gh release create ${{ github.ref_name }} `
             dist/AuEye.zip `
-            dist/AuEye.exe `
             --repo ${{ github.repository }} `
             --title "AuEye ${{ github.ref_name }}" `
             --generate-notes
