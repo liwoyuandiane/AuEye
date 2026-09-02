@@ -79,12 +79,6 @@ aueye/
 └── CLAUDE.md         # Claude Code 开发文档（不上传）
 ```
 
-## 数据源
-
-| 数据 | 接口 | 频率 |
-|------|------|------|
-| 浙商银行财富金 | 京东金融 `cfGetLatestPriceInfo` (productSku=1961543816) | 2秒 |
-
 ## License
 
 MIT
