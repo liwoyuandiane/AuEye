@@ -72,7 +72,7 @@ def _history_path():
         base_dir = os.path.dirname(sys.executable)
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, "gold_history.csv")
+    return os.path.join(base_dir, "aueye_history.csv")
 
 
 def _log_file():
@@ -80,7 +80,7 @@ def _log_file():
         base_dir = os.path.dirname(sys.executable)
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, "gold.log")
+    return os.path.join(base_dir, "aueye.log")
 
 
 log = logging.getLogger("gold")
@@ -206,12 +206,12 @@ class SettingsWindow(tk.Toplevel):
             row=2, column=0, columnspan=3, sticky="w", pady=(14, 0))
 
         self.var_log_enabled = tk.BooleanVar(value=self.app.log_enabled)
-        ttk.Checkbutton(frame, text="记录日志文件 gold.log",
+        ttk.Checkbutton(frame, text="记录日志文件 aueye.log",
                         variable=self.var_log_enabled).grid(
             row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         self.var_history_enabled = tk.BooleanVar(value=self.app.history_enabled)
-        ttk.Checkbutton(frame, text="记录历史价格 gold_history.csv",
+        ttk.Checkbutton(frame, text="记录历史价格 aueye_history.csv",
                         variable=self.var_history_enabled).grid(
             row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
@@ -653,7 +653,7 @@ class GoldTaskbarDoubleLine:
             item("退出",             self._tray_quit),
         )
         init_icon = self._make_tray_icon(price=None)
-        self.tray = pystray.Icon("GoldMonitor", init_icon, "浙商金监控", menu)
+        self.tray = pystray.Icon("AuEye", init_icon, "AuEye", menu)
         threading.Thread(target=self.tray.run, daemon=True).start()
 
     def _tray_toggle(self,   icon=None, menu_item=None): self.root.after(0, self.toggle_visible)

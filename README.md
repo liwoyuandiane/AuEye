@@ -1,4 +1,4 @@
-# 浙商金监控
+# AuEye — 浙商金价监控
 
 一款轻量级 Windows 桌面金价实时监控工具，从京东金融平台抓取浙商银行财富金价格（元/克），以悬浮卡片 + 系统托盘数字显示，支持阈值提醒、邮件通知和异动检测。
 
@@ -18,7 +18,7 @@
 ### 直接运行
 
 ```
-双击 gold.exe
+双击 aueye.exe
 ```
 
 - 启动后金价数字显示在**系统托盘**（任务栏右下角）
@@ -31,7 +31,7 @@
 pip install requests pillow pystray
 
 # 运行
-python gold.py
+python aueye.py
 ```
 
 ## 配置说明
@@ -46,20 +46,20 @@ python gold.py
 | 上破提醒 | 关闭 | 金价上穿此值时通知 |
 | 下破提醒 | 900.0 | 金价下穿此值时通知 |
 | 邮件提醒间隔 | 10分钟 | 价格停留阈值区间时重复发邮件的间隔（≥5分钟） |
-| 日志/历史 | 关闭 | 启用后生成 `gold.log` 和 `gold_history.csv` |
+| 日志/历史 | 关闭 | 启用后生成 `aueye.log` 和 `aueye_history.csv` |
 
 ## 打包为 EXE
 
 ```bash
 pip install pyinstaller
 
-pyinstaller --onefile --noconsole --strip --name gold --icon=gold_icon.ico gold.py \
+pyinstaller --onefile --noconsole --strip --name aueye --icon=gold_icon.ico aueye.py \
   --exclude-module numpy --exclude-module tkinter.test \
   --exclude-module setuptools --exclude-module distutils \
   --exclude-module pip --exclude-module pkg_resources
 ```
 
-产物在 `dist/gold.exe`（约 20MB）。
+产物在 `dist/aueye.exe`（约 20MB）。
 
 ## 技术栈
 
@@ -72,9 +72,9 @@ pyinstaller --onefile --noconsole --strip --name gold --icon=gold_icon.ico gold.
 ## 项目结构
 
 ```
-gold/
-├── gold.py           # 主程序（浙商金价监控）
-├── test_gold.py      # 单元测试
+aueye/
+├── aueye.py           # 主程序（浙商金价监控）
+├── test_aueye.py      # 单元测试
 ├── gold_icon.ico     # 自定义 EXE 图标
 └── CLAUDE.md         # Claude Code 开发文档（不上传）
 ```

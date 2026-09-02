@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for gold.py (浙商金价监控精简版)"""
+"""Comprehensive unit tests for aueye.py (浙商金价监控精简版)"""
 import sys, unittest, json, tempfile, os, time, queue
 from unittest.mock import Mock, patch, MagicMock
 
@@ -22,19 +22,19 @@ tk.Tk = MagicMock()
 
 # Import the app
 sys.path.insert(0, '.')
-import gold
+import aueye
 
 # Redirect config to temp dir
-gold._config_path = lambda: os.path.join(tempfile.gettempdir(), 'test_config.json')
+aueye._config_path = lambda: os.path.join(tempfile.gettempdir(), 'test_config.json')
 
 # Clean up test config
-if os.path.exists(gold._config_path()):
-    os.remove(gold._config_path())
+if os.path.exists(aueye._config_path()):
+    os.remove(aueye._config_path())
 
 
 class TestConfigPath(unittest.TestCase):
     def test_config_not_frozen(self):
-        path = gold._config_path()
+        path = aueye._config_path()
         self.assertIn('test_config.json', path)
 
     def test_config_frozen_impl(self):
@@ -43,7 +43,7 @@ class TestConfigPath(unittest.TestCase):
         exec('def _cfg_path():\n    if getattr(sys, "frozen", False):\n        return "frozen:" + os.path.dirname(sys.executable)\n    else:\n        return "normal"', exec_globals)
         self.assertEqual(exec_globals['_cfg_path'](), 'normal')
         with patch.object(sys, 'frozen', True, create=True):
-            with patch.object(sys, 'executable', r'C:\test_app\gold.exe'):
+            with patch.object(sys, 'executable', r'C:\test_app\aueye.exe'):
                 exec_globals2 = {'sys': sys, 'os': os}
                 exec('def _cfg_path():\n    if getattr(sys, "frozen", False):\n        return "frozen:" + os.path.dirname(sys.executable)\n    else:\n        return "normal"', exec_globals2)
                 result = exec_globals2['_cfg_path']()
@@ -53,7 +53,7 @@ class TestConfigPath(unittest.TestCase):
 
 class TestCheckAlert(unittest.TestCase):
     def setUp(self):
-        self.app = gold.GoldTaskbarDoubleLine.__new__(gold.GoldTaskbarDoubleLine)
+        self.app = aueye.GoldTaskbarDoubleLine.__new__(aueye.GoldTaskbarDoubleLine)
         self.app.au_upper_target = 500.0
         self.app.au_lower_target = 400.0
         self.app.au_upper_triggered = False
@@ -128,14 +128,14 @@ class TestCheckAlert(unittest.TestCase):
 
 class TestExtremeDetection(unittest.TestCase):
     def setUp(self):
-        self.app = gold.GoldTaskbarDoubleLine.__new__(gold.GoldTaskbarDoubleLine)
+        self.app = aueye.GoldTaskbarDoubleLine.__new__(aueye.GoldTaskbarDoubleLine)
         self.app.extreme_enabled = True
         self.app.extreme_window_sec = 300
         self.app.extreme_threshold = 5.0
         self.app.extreme_cooldown_sec = 60
         self.app.extreme_last_ts = 0.0
         self.app._action_queue = queue.Queue()
-        self.app.au_history = gold.deque()
+        self.app.au_history = aueye.deque()
         self.app.extreme_flash_times = 6
         self.app.up_color = '#FF3B30'
         self.app.down_color = '#00C853'
@@ -164,7 +164,7 @@ class TestExtremeDetection(unittest.TestCase):
 
 class TestFlashText(unittest.TestCase):
     def setUp(self):
-        self.app = gold.GoldTaskbarDoubleLine.__new__(gold.GoldTaskbarDoubleLine)
+        self.app = aueye.GoldTaskbarDoubleLine.__new__(aueye.GoldTaskbarDoubleLine)
         self.app.flash_active = False
         self.app._flash_after_id = None
         self.app.text_color = '#F5F5F7'
@@ -201,38 +201,38 @@ class TestFlashText(unittest.TestCase):
 
 class TestLoadConfig(unittest.TestCase):
     def setUp(self):
-        if os.path.exists(gold._config_path()):
-            os.remove(gold._config_path())
+        if os.path.exists(aueye._config_path()):
+            os.remove(aueye._config_path())
 
     def test_default_when_no_file(self):
-        cfg = gold.GoldTaskbarDoubleLine.load_config(MagicMock())
+        cfg = aueye.GoldTaskbarDoubleLine.load_config(MagicMock())
         self.assertEqual(cfg['refresh_interval'], 2)
         self.assertEqual(cfg['au_lower_value'], 900.0)
 
     def test_saved_merges_with_defaults(self):
         saved = {'refresh_interval': 5}
-        with open(gold._config_path(), 'w') as f:
+        with open(aueye._config_path(), 'w') as f:
             json.dump(saved, f)
-        cfg = gold.GoldTaskbarDoubleLine.load_config(MagicMock())
+        cfg = aueye.GoldTaskbarDoubleLine.load_config(MagicMock())
         self.assertEqual(cfg['refresh_interval'], 5)
         self.assertEqual(cfg['au_lower_value'], 900.0)
 
     def test_no_intl_keys_in_default(self):
-        cfg = gold.GoldTaskbarDoubleLine.load_config(MagicMock())
+        cfg = aueye.GoldTaskbarDoubleLine.load_config(MagicMock())
         self.assertNotIn('intl_upper_value', cfg)
         self.assertNotIn('intl_lower_value', cfg)
 
 
 class TestBackoff(unittest.TestCase):
     def test_backoff_increases_and_caps(self):
-        app = gold.GoldTaskbarDoubleLine.__new__(gold.GoldTaskbarDoubleLine)
+        app = aueye.GoldTaskbarDoubleLine.__new__(aueye.GoldTaskbarDoubleLine)
         app.interval = 2
         app._fetch_fail_count = 5
         backoff = min(app.interval * (2 ** app._fetch_fail_count), 60)
         self.assertEqual(backoff, 60)
 
     def test_backoff_resets_on_success(self):
-        app = gold.GoldTaskbarDoubleLine.__new__(gold.GoldTaskbarDoubleLine)
+        app = aueye.GoldTaskbarDoubleLine.__new__(aueye.GoldTaskbarDoubleLine)
         app.interval = 2
         app._fetch_fail_count = 0
         backoff = app.interval if app._fetch_fail_count == 0 else min(app.interval * (2 ** app._fetch_fail_count), 60)

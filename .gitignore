@@ -3,9 +3,8 @@ dist/
 build/
 *.spec
 config.json
-gold_history.csv
-gold.log
+aueye_history.csv
+aueye.log
 crash.log
-icon.ico
 CLAUDE.md
 .claude/
