@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import requests
 import json
-import csv
 import ctypes
 import random
 import os
@@ -48,7 +47,6 @@ DEFAULT_CONFIG = {
     "email_interval_sec": 600,
     "sound_enabled": True,
     "log_enabled": False,
-    "history_enabled": False,
     "email_enabled": False,
     "email_sender": "",
     "email_password": "",
@@ -66,13 +64,6 @@ def _config_path():
         base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, "config.json")
 
-
-def _history_path():
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, "aueye_history.csv")
 
 
 def _log_file():
@@ -209,11 +200,6 @@ class SettingsWindow(tk.Toplevel):
         ttk.Checkbutton(frame, text="记录日志文件 aueye.log",
                         variable=self.var_log_enabled).grid(
             row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
-
-        self.var_history_enabled = tk.BooleanVar(value=self.app.history_enabled)
-        ttk.Checkbutton(frame, text="记录历史价格 aueye_history.csv",
-                        variable=self.var_history_enabled).grid(
-            row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         frame.columnconfigure(1, weight=1)
 
@@ -389,7 +375,6 @@ class SettingsWindow(tk.Toplevel):
             "email_interval_sec": max(300, int(float(self.var_email_interval.get().strip()) * 60)),
             "sound_enabled":  self.var_sound_enabled.get(),
             "log_enabled":     self.var_log_enabled.get(),
-            "history_enabled": self.var_history_enabled.get(),
         }
         self.app.apply_config(new_cfg)
         self.app.save_config()
@@ -509,7 +494,6 @@ class GoldTaskbarDoubleLine:
         # 声音 / 日志 / 历史
         self.sound_enabled  = True
         self.log_enabled     = False
-        self.history_enabled = False
 
         # ===== 线程共享价格 =====
         self.au      = None
@@ -598,7 +582,6 @@ class GoldTaskbarDoubleLine:
 
         self.sound_enabled     = bool(self.config.get("sound_enabled",     True))
         self.log_enabled       = bool(self.config.get("log_enabled",       False))
-        self.history_enabled   = bool(self.config.get("history_enabled",   False))
 
         if self.log_enabled: _attach_log_file()
         else: _detach_log_file()
@@ -891,17 +874,6 @@ class GoldTaskbarDoubleLine:
 
         self.root.after(200, self._update_ui_cycle)
 
-    # ================================================================ 历史记录
-    def _write_history(self, au):
-        if not getattr(self, "history_enabled", False): return
-        try:
-            new_file = not os.path.exists(_history_path())
-            with open(_history_path(), "a", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                if new_file: w.writerow(["time","zs"])
-                w.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), "" if au is None else f"{au:.2f}"])
-        except Exception: pass
-
     # ================================================================ 抓取循环
     def _data_fetch_loop(self):
         while True:
@@ -914,7 +886,6 @@ class GoldTaskbarDoubleLine:
                     self._track_au_extreme(new_au)
                 else:
                     self._fetch_fail_count += 1
-                self._write_history(new_au)
             except KeyboardInterrupt: raise
             except Exception as e:
                 log.error(f"Data fetch loop error: {e}")
