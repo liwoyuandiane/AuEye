@@ -18,7 +18,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: pip install requests pillow pystray pyinstaller
@@ -27,6 +27,7 @@ jobs:
         run: >
           pyinstaller --onefile --noconsole --strip --name AuEye
           --icon=gold_icon.ico aueye.py
+          --collect-all vcruntime
           --exclude-module numpy --exclude-module tkinter.test
           --exclude-module setuptools --exclude-module distutils
           --exclude-module pip --exclude-module pkg_resources
