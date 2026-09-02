@@ -3,7 +3,10 @@ name: Build & Release EXE
 on:
   push:
     tags:
-      - 'v*'    # 推送 tag 时触发，如 v1.0.0
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -18,15 +21,15 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: |
-          pip install requests pillow pystray pyinstaller
+        run: pip install requests pillow pystray pyinstaller
 
       - name: Build EXE
-        run: |
-          pyinstaller --onefile --noconsole --strip --name AuEye --icon=gold_icon.ico aueye.py ^
-            --exclude-module numpy --exclude-module tkinter.test ^
-            --exclude-module setuptools --exclude-module distutils ^
-            --exclude-module pip --exclude-module pkg_resources
+        run: >
+          pyinstaller --onefile --noconsole --strip --name AuEye
+          --icon=gold_icon.ico aueye.py
+          --exclude-module numpy --exclude-module tkinter.test
+          --exclude-module setuptools --exclude-module distutils
+          --exclude-module pip --exclude-module pkg_resources
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
