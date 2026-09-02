@@ -84,7 +84,6 @@ aueye/
 | 数据 | 接口 | 频率 |
 |------|------|------|
 | 浙商银行财富金 | 京东金融 `cfGetLatestPriceInfo` (productSku=1961543816) | 2秒 |
-| Au99.99 7天日线 | 东方财富 `push2his.eastmoney.com`（备用，用于走势图） | 10分钟 |
 
 ## License
 
