@@ -1,0 +1,11 @@
+__pycache__/
+dist/
+build/
+*.spec
+config.json
+gold_history.csv
+gold.log
+crash.log
+icon.ico
+CLAUDE.md
+.claude/
