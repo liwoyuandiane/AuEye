@@ -280,9 +280,9 @@ class SettingsWindow(tk.Toplevel):
         ttk.Entry(frame, textvariable=self.var_smtp_port, width=10).grid(row=6, column=1, sticky="w", padx=(10, 0), pady=(6, 0))
 
         self.var_smtp_ssl = tk.BooleanVar(value=self.app.smtp_ssl)
-        ttk.Checkbutton(frame, text="SSL 加密", variable=self.var_smtp_ssl).grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(frame, text="SSL 加密", variable=self.var_smtp_ssl).grid(row=6, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
-        ttk.Separator(frame).grid(row=7, column=0, columnspan=4, sticky="we", pady=10)
+        ttk.Separator(frame).grid(row=7, column=0, columnspan=3, sticky="we", pady=10)
         ttk.Label(frame, text="邮件提醒间隔（分钟）").grid(row=8, column=0, sticky="w", pady=(4, 0))
         self.var_email_interval = tk.StringVar(value=str(max(5, int(self.app.email_interval_sec // 60))))
         ttk.Entry(frame, textvariable=self.var_email_interval, width=8).grid(row=8, column=1, sticky="w", padx=(10, 0), pady=(4, 0))
