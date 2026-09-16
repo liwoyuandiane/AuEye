@@ -1,9 +1,17 @@
 name: Build & Release EXE
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '版本号 (例如 v1.0.1)'
+        required: true
+        default: 'v1.0.1'
+      prerelease:
+        description: '是否为预发布版本'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -32,16 +40,20 @@ jobs:
           --exclude-module numpy --exclude-module tkinter.test
           --exclude-module setuptools --exclude-module distutils
           --exclude-module pip --exclude-module pkg_resources
+          --exclude-module pandas --exclude-module akshare
+          --exclude-module lxml --exclude-module bs4
+          --exclude-module curl_cffi --exclude-module mini_racer
 
       - name: Package into ZIP
         run: Compress-Archive -Path dist\AuEye.exe -DestinationPath dist\AuEye.zip
 
-      - name: Upload release assets
+      - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ github.ref_name }} `
+          gh release create ${{ inputs.tag }} `
             dist/AuEye.zip `
             --repo ${{ github.repository }} `
-            --title "AuEye ${{ github.ref_name }}" `
-            --generate-notes
+            --title "AuEye ${{ inputs.tag }}" `
+            --generate-notes `
+            ${{ inputs.prerelease && '--prerelease' || '' }}
