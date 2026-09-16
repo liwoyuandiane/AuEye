@@ -395,6 +395,12 @@ class GoldTaskbarDoubleLine:
 
     TRAY_ICON_SIZE = 256  # 超高分辨率源图，缩放后更清晰
 
+    # 托盘图标字号参数（相对于 TRAY_ICON_SIZE 的比例）
+    _TRAY_FONT_RATIO       = 0.60   # 每行数字字号占圆直径的比例
+    _TRAY_OUTER_STROKE     = 5      # 黑色外描边宽度（缩放后仍醒目）
+    _TRAY_LINE1_Y_RATIO    = 0.28   # 第一行垂直中心位置
+    _TRAY_LINE2_Y_RATIO    = 0.72   # 第二行垂直中心位置
+
     def __init__(self):
         self.config = self.load_config()
         self.root   = tk.Tk()
@@ -415,8 +421,8 @@ class GoldTaskbarDoubleLine:
         self.text_font_size        = 10
         self.flash_text_font_size  = 12
         self.arrow_font_size       = 15
-        self.card_width            = 200
-        self.card_height           = 60
+        self.card_width            = 220
+        self.card_height           = 130
         self.corner_radius         = 15
 
         self.root.configure(bg=self.bg_color)
@@ -512,6 +518,12 @@ class GoldTaskbarDoubleLine:
         self.flash_active            = False
         self._flash_after_id         = None
 
+        # 分时走势数据
+        self._timesharing_data       = []     # [{price, time}, ...]
+        self._timesharing_pre_close  = None   # 昨收价
+        self._sparkline_item_ids     = []     # canvas item IDs for sparkline
+        self._sparkline_visible      = False  # 是否显示折线区域
+
         # 线程同步
         self._price_lock      = threading.Lock()
         self._action_queue    = queue.Queue()
@@ -529,6 +541,8 @@ class GoldTaskbarDoubleLine:
 
         self.data_thread = threading.Thread(target=self._data_fetch_loop, daemon=True)
         self.data_thread.start()
+        # 启动时立即拉取一次分时走势数据
+        threading.Thread(target=self._fetch_timesharing, daemon=True).start()
         self._update_ui_cycle()
 
     # ================================================================ config
@@ -589,16 +603,16 @@ class GoldTaskbarDoubleLine:
 
     # ================================================================ 动态托盘图标
     def _make_tray_icon(self, price=None, prev_price=None):
-        """生成圆形托盘图标：超大两行金价数字，字号填满圆内空间。"""
+        """生成托盘图标：超大两行金价数字，粗描边确保缩放后清晰可读。"""
         sz = self.TRAY_ICON_SIZE
 
         # 涨跌配色
         if price is not None and prev_price is not None and price > prev_price:
-            bg, fg = (200,35,35),  (255,255,255)    # 红底白字
+            bg, fg = (145,20,20),  (255,255,255)    # 红底白字（降亮度提升对比）
         elif price is not None and prev_price is not None and price < prev_price:
-            bg, fg = (25,140,60),  (255,255,255)    # 绿底白字
+            bg, fg = (18,100,45),  (255,255,255)    # 绿底白字（降亮度提升对比）
         else:
-            bg, fg = (50,50,65),   (255,255,255)    # 深灰底白字
+            bg, fg = (40,40,55),   (255,255,255)    # 深灰底白字
 
         # 透明背景 + 圆形裁剪
         img = Image.new("RGBA", (sz, sz), (0,0,0,0))
@@ -612,9 +626,15 @@ class GoldTaskbarDoubleLine:
             s = "--"
         line1, line2 = s[:2], s[2:]
 
-        # ★ 字号拉满：每行字号 = 圆直径的 42%（两行叠起超圆高 → 溢出裁掉也不管）
-        font_size = int(sz * 0.42)
+        # ★ 字号拉满 + 粗描边：缩放到 16×16/32×32 后数字仍清晰
+        font_size = int(sz * self._TRAY_FONT_RATIO)
         font = _find_font(size=font_size, bold=True)
+
+        def draw_outlined_text(x, y, text, fill, outline_color, stroke_width):
+            """先画粗描边、再画填充文字，确保缩放后可读。"""
+            draw.text((x, y), text, fill=outline_color, font=font,
+                       stroke_width=stroke_width, stroke_fill=outline_color)
+            draw.text((x, y), text, fill=fill, font=font)
 
         def draw_line(text, y_center):
             try:
@@ -624,10 +644,12 @@ class GoldTaskbarDoubleLine:
                 tw, th = len(text)*font_size//2, font_size
             x = (sz - tw) / 2
             y = y_center - th/2
-            draw.text((x, y), text, fill=fg+(255,), font=font)
+            draw_outlined_text(x, y, text, fill=fg+(255,),
+                               outline_color=(0, 0, 0, 220),
+                               stroke_width=self._TRAY_OUTER_STROKE)
 
-        draw_line(line1, sz * 0.34)
-        draw_line(line2, sz * 0.72)
+        draw_line(line1, sz * self._TRAY_LINE1_Y_RATIO)
+        draw_line(line2, sz * self._TRAY_LINE2_Y_RATIO)
         return img
 
     def _setup_tray(self):
@@ -685,6 +707,80 @@ class GoldTaskbarDoubleLine:
             self.canvas.create_rectangle(x1+1, y1+r, x1+2, y2-r, fill=cb, outline=cb),
             self.canvas.create_rectangle(x2-2, y1+r, x2-1, y2-r, fill=cb, outline=cb),
         ]
+        # 价格区与折线区之间的分隔线
+        divider_y = 50
+        self.card_border_items.append(
+            self.canvas.create_line(8, divider_y, self.card_width - 8, divider_y,
+                                    fill=self.card_border, dash=(3, 3), width=1))
+
+    def _draw_sparkline(self):
+        """在卡片下半部分绘制分时走势折线图。"""
+        # 清除旧折线
+        for item_id in self._sparkline_item_ids:
+            try: self.canvas.delete(item_id)
+            except Exception: pass
+        self._sparkline_item_ids.clear()
+
+        with self._price_lock:
+            data = list(self._timesharing_data)
+            pre_close = self._timesharing_pre_close
+
+        if len(data) < 2:
+            self._sparkline_visible = False
+            return
+        self._sparkline_visible = True
+
+        prices = [d["price"] for d in data]
+        # 折线区域：卡片下半部分
+        area_x1, area_y1 = 12, 56
+        area_x2, area_y2 = self.card_width - 12, self.card_height - 8
+        area_w = area_x2 - area_x1
+        area_h = area_y2 - area_y1
+
+        p_min, p_max = min(prices), max(prices)
+        # 确保纵轴有合理范围（防止价格不变时除零）
+        if p_max - p_min < 0.5:
+            p_min -= 0.5
+            p_max += 0.5
+
+        # 昨收价虚线参考线
+        if pre_close is not None and p_min <= pre_close <= p_max:
+            ref_y = area_y2 - (pre_close - p_min) / (p_max - p_min) * area_h
+            item = self.canvas.create_line(area_x1, ref_y, area_x2, ref_y,
+                                           fill=self.muted_color, dash=(2, 2), width=1)
+            self._sparkline_item_ids.append(item)
+
+        # 生成折线坐标点
+        coords = []
+        for i, p in enumerate(prices):
+            x = area_x1 + i / (len(prices) - 1) * area_w
+            y = area_y2 - (p - p_min) / (p_max - p_min) * area_h
+            coords.extend([x, y])
+
+        if len(coords) < 4:
+            return
+
+        # 折线颜色：最新价 vs 昨收价
+        last_price = prices[-1]
+        if pre_close is not None:
+            line_color = self.up_color if last_price >= pre_close else self.down_color
+        else:
+            line_color = self.muted_color
+
+        item = self.canvas.create_line(*coords, fill=line_color, width=1.5, smooth=True)
+        self._sparkline_item_ids.append(item)
+
+        # 标注最高/最低价
+        try:
+            hi_font = (self.font_family, 8)
+            hi_text = self.canvas.create_text(
+                area_x2, area_y1 + 2, text=f"{p_max:.0f}",
+                fill=self.muted_color, font=hi_font, anchor="ne")
+            lo_text = self.canvas.create_text(
+                area_x2, area_y2 - 2, text=f"{p_min:.0f}",
+                fill=self.muted_color, font=hi_font, anchor="se")
+            self._sparkline_item_ids.extend([hi_text, lo_text])
+        except Exception: pass
 
     def _apply_card_style(self, fill_color, border_color):
         for it in self.card_fill_items:   self.canvas.itemconfig(it, fill=fill_color,   outline=fill_color)
@@ -748,6 +844,40 @@ class GoldTaskbarDoubleLine:
                 return float(d["resultData"]["data"]["price"])
         except Exception: pass
         return None
+
+    def _fetch_timesharing(self):
+        """获取京东24h金价分时走势数据（每分钟价格点）。"""
+        try:
+            res = self.session.post(
+                "https://api.jdjygold.com/gw/generic/hj/h5/m/cfgetTimeSharingDots",
+                headers={"Content-Type": "application/x-www-form-urlencoded",
+                         "Origin": "https://m.jdjygold.com", "Referer": "https://m.jdjygold.com/"},
+                data={"reqData": json.dumps({"uniqueCode": "WG-JDAU", "type": "m1"})},
+                timeout=5)
+            res.raise_for_status()
+            d = res.json()
+            if d.get("success") and d.get("resultData", {}).get("code") == "00000000":
+                inner = d["resultData"].get("data", {})
+                pre_close = inner.get("preClose")
+                dots = inner.get("timeSharingDotItemDTOList") or inner.get("timeSharingDotDtoList") or []
+                result = []
+                for pt in dots:
+                    price = pt.get("lastPrice") or pt.get("curPrice")
+                    time_str = pt.get("tradeDateTime") or pt.get("tradeTime")
+                    if price is not None and time_str:
+                        try:
+                            result.append({"price": float(price), "time": str(time_str)})
+                        except (ValueError, TypeError):
+                            pass
+                with self._price_lock:
+                    self._timesharing_data = result
+                    if pre_close is not None:
+                        try: self._timesharing_pre_close = float(pre_close)
+                        except (ValueError, TypeError): pass
+                return result
+        except Exception:
+            pass
+        return []
 
     # ================================================================ 通知
     def _notify(self, msg):
@@ -863,6 +993,14 @@ class GoldTaskbarDoubleLine:
                 clr   = self.up_color if au > prev else (self.down_color if au < prev else self.muted_color)
                 self.canvas.itemconfig(self.au_arrow_text, text=arrow, fill=clr)
 
+        # 分时走势折线图（每2秒刷新一次，避免频繁重绘）
+        if not hasattr(self, '_sparkline_tick'): self._sparkline_tick = 0
+        self._sparkline_tick += 1
+        if self._sparkline_tick >= 10:  # 10 * 200ms = 2s
+            self._sparkline_tick = 0
+            try: self._draw_sparkline()
+            except Exception: pass
+
         # ★ 动态托盘图标：每 200ms 检查，金价变化时生成新图标替换
         if self.tray is not None and self.tray.visible:
             try:
@@ -876,6 +1014,7 @@ class GoldTaskbarDoubleLine:
 
     # ================================================================ 抓取循环
     def _data_fetch_loop(self):
+        ts_counter = 0
         while True:
             try:
                 new_au = self._fetch_au()
@@ -886,6 +1025,11 @@ class GoldTaskbarDoubleLine:
                     self._track_au_extreme(new_au)
                 else:
                     self._fetch_fail_count += 1
+                # 每60秒刷新一次分时走势数据
+                ts_counter += 1
+                if ts_counter >= max(1, int(self.interval)):
+                    self._fetch_timesharing()
+                    ts_counter = 0
             except KeyboardInterrupt: raise
             except Exception as e:
                 log.error(f"Data fetch loop error: {e}")

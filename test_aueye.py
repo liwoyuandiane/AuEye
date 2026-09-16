@@ -239,11 +239,107 @@ class TestBackoff(unittest.TestCase):
         self.assertEqual(backoff, 2)
 
 
+class TestTimesharing(unittest.TestCase):
+    def setUp(self):
+        self.app = aueye.GoldTaskbarDoubleLine.__new__(aueye.GoldTaskbarDoubleLine)
+        self.app._timesharing_data = []
+        self.app._timesharing_pre_close = None
+        self.app._sparkline_item_ids = []
+        self.app._sparkline_visible = False
+        self.app.session = MagicMock()
+        self.app.muted_color = '#9AA0A6'
+        self.app.up_color = '#FF3B30'
+        self.app.down_color = '#00C853'
+        self.app.font_family = 'Segoe UI'
+        self.app.card_width = 220
+        self.app.card_height = 130
+        self.app.card_color = '#101218'
+        self.app.card_border = '#2A2D36'
+        self.app.corner_radius = 15
+        self.app.canvas = MagicMock()
+        self.app._price_lock = __import__('threading').Lock()
+
+    def test_fetch_timesharing_success(self):
+        """分时API返回正常数据时正确解析。"""
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "success": True,
+            "resultData": {
+                "code": "00000000",
+                "data": {
+                    "preClose": 930.0,
+                    "timeSharingDotItemDTOList": [
+                        {"lastPrice": 931.5, "tradeDateTime": "10:01"},
+                        {"lastPrice": 932.0, "tradeDateTime": "10:02"},
+                    ]
+                }
+            }
+        }
+        mock_resp.raise_for_status = MagicMock()
+        self.app.session.post.return_value = mock_resp
+
+        result = self.app._fetch_timesharing()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["price"], 931.5)
+        self.assertEqual(self.app._timesharing_pre_close, 930.0)
+
+    def test_fetch_timesharing_empty(self):
+        """分时API返回空数据时不崩溃。"""
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"success": True, "resultData": {"code": "00000000", "data": {"preClose": 930.0, "timeSharingDotItemDTOList": []}}}
+        mock_resp.raise_for_status = MagicMock()
+        self.app.session.post.return_value = mock_resp
+
+        result = self.app._fetch_timesharing()
+        self.assertEqual(len(result), 0)
+
+    def test_fetch_timesharing_api_failure(self):
+        """分时API失败时不影响程序。"""
+        self.app.session.post.side_effect = Exception("network error")
+        result = self.app._fetch_timesharing()
+        self.assertEqual(result, [])
+
+    def test_sparkline_no_data(self):
+        """无分时数据时折线图不显示。"""
+        self.app._timesharing_data = []
+        self.app._draw_sparkline()
+        self.assertFalse(self.app._sparkline_visible)
+
+    def test_sparkline_with_data(self):
+        """有分时数据时正确生成折线坐标。"""
+        self.app._timesharing_data = [
+            {"price": 930.0, "time": "10:01"},
+            {"price": 932.0, "time": "10:02"},
+            {"price": 931.0, "time": "10:03"},
+        ]
+        self.app._timesharing_pre_close = 930.5
+        self.app.canvas.create_line = MagicMock(return_value=1)
+        self.app.canvas.create_text = MagicMock(return_value=2)
+
+        self.app._draw_sparkline()
+        self.assertTrue(self.app._sparkline_visible)
+        self.assertGreater(self.app.canvas.create_line.call_count, 0)
+
+    def test_sparkline_flat_price(self):
+        """价格不变时纵轴仍有合理范围。"""
+        self.app._timesharing_data = [
+            {"price": 930.0, "time": "10:01"},
+            {"price": 930.0, "time": "10:02"},
+            {"price": 930.0, "time": "10:03"},
+        ]
+        self.app._timesharing_pre_close = None
+        self.app.canvas.create_line = MagicMock(return_value=1)
+        self.app.canvas.create_text = MagicMock(return_value=2)
+
+        self.app._draw_sparkline()
+        self.assertTrue(self.app._sparkline_visible)
+
+
 if __name__ == '__main__':
     runner = unittest.TextTestRunner(verbosity=2)
     suite = unittest.TestSuite()
     for cls in [TestConfigPath, TestCheckAlert, TestExtremeDetection,
-                TestFlashText, TestLoadConfig, TestBackoff]:
+                TestFlashText, TestLoadConfig, TestBackoff, TestTimesharing]:
         suite.addTests(unittest.TestLoader().loadTestsFromTestCase(cls))
     result = runner.run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
