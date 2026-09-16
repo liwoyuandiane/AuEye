@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '版本号 (例如 v1.0.1)'
+        description: '版本号 (填 auto 自动递增补丁号，或手动填 v1.2.3)'
         required: true
-        default: 'v1.0.1'
+        default: 'auto'
       prerelease:
         description: '是否为预发布版本'
         required: false
@@ -22,6 +22,39 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 需要完整 tag 历史来自动推断版本
+
+      - name: Resolve version tag
+        id: version
+        shell: bash
+        run: |
+          INPUT_TAG="${{ inputs.tag }}"
+          if [ "$INPUT_TAG" = "auto" ]; then
+            # 获取最新 semver tag（匹配 v数字.数字.数字）
+            LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+            if [ -z "$LATEST" ]; then
+              # 没有已有 tag，从 v1.0.0 开始
+              NEW_TAG="v1.0.0"
+            else
+              # 提取 patch 号并 +1
+              PATCH=$(echo "$LATEST" | sed 's/^v//' | awk -F. '{print $3}')
+              MAJOR=$(echo "$LATEST" | sed 's/^v//' | awk -F. '{print $1}')
+              MINOR=$(echo "$LATEST" | sed 's/^v//' | awk -F. '{print $2}')
+              NEW_PATCH=$((PATCH + 1))
+              NEW_TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+            fi
+            echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+            echo "✅ 自动递增版本号: **$LATEST** → **$NEW_TAG**"
+          else
+            # 用户手动指定了版本号
+            if [[ ! "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "❌ 版本号格式错误: $INPUT_TAG (应为 v1.2.3)"
+              exit 1
+            fi
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+            echo "✅ 使用指定版本号: **$INPUT_TAG**"
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -51,9 +84,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ inputs.tag }} `
+          $TAG = "${{ steps.version.outputs.tag }}"
+          Write-Host "📦 发布版本: $TAG"
+          gh release create "$TAG" `
             dist/AuEye.zip `
             --repo ${{ github.repository }} `
-            --title "AuEye ${{ inputs.tag }}" `
+            --title "AuEye $TAG" `
             --generate-notes `
             ${{ inputs.prerelease && '--prerelease' || '' }}
