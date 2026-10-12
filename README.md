@@ -18,7 +18,7 @@
 ### 直接运行
 
 ```
-双击 aueye.exe
+双击 AuEye.exe
 ```
 
 - 启动后金价数字显示在**系统托盘**（任务栏右下角）
@@ -46,20 +46,20 @@ python aueye.py
 | 上破提醒 | 关闭 | 金价上穿此值时通知 |
 | 下破提醒 | 900.0 | 金价下穿此值时通知 |
 | 邮件提醒间隔 | 10分钟 | 价格停留阈值区间时重复发邮件的间隔（≥5分钟） |
-| 日志/历史 | 关闭 | 启用后生成 `aueye.log` 和 `aueye_history.csv` |
+| 日志/历史 | 关闭 | 启用后生成 `aueye.log` |
 
 ## 打包为 EXE
 
 ```bash
 pip install pyinstaller
 
-pyinstaller --onefile --noconsole --strip --name aueye --icon=gold_icon.ico aueye.py \
+pyinstaller --onefile --noconsole --strip --name AuEye --icon=gold_icon.ico aueye.py \
   --exclude-module numpy --exclude-module tkinter.test \
   --exclude-module setuptools --exclude-module distutils \
   --exclude-module pip --exclude-module pkg_resources
 ```
 
-产物在 `dist/aueye.exe`（约 20MB）。
+产物在 `dist/AuEye.exe`（约 20MB）。
 
 ## 技术栈
 

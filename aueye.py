@@ -23,15 +23,22 @@ try:
 except Exception:
     winsound = None
 
-# DPI 适配
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)
-except Exception:
-    ctypes.windll.user32.SetProcessDPIAware()
+# DPI 适配（仅 Windows 有效；其他平台静默跳过）
+def _enable_dpi_awareness():
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
+_enable_dpi_awareness()
 
 DEFAULT_CONFIG = {
     "refresh_interval": 2,
-    "opacity": 0.55,
+    "opacity": 0.80,
     "au_upper_enabled": False,
     "au_upper_value": 0.0,
     "au_lower_enabled": True,
@@ -105,39 +112,50 @@ def _detach_log_file():
             log.removeHandler(h)
 
 
-def _taskbar_rect():
-    """获取任务栏的屏幕矩形 (left, top, right, bottom)。失败返回 None。"""
+
+
+_FONT_CACHE = {}
+
+
+def timesharing_needed(counter, interval):
+    """分时走势刷新节流：每 60 秒（按刷新间隔计数）取一次。"""
     try:
-        from ctypes import wintypes
-        class RECT(ctypes.Structure):
-            _fields_ = [("left",ctypes.c_long),("top",ctypes.c_long),("right",ctypes.c_long),("bottom",ctypes.c_long)]
-        class APPBARDATA(ctypes.Structure):
-            _fields_ = [("cbSize",wintypes.DWORD),("hWnd",wintypes.HWND),("uCallbackMessage",wintypes.UINT),
-                        ("uEdge",wintypes.UINT),("rc",RECT),("lParam",ctypes.c_long)]
-        apt = APPBARDATA(); apt.cbSize = ctypes.sizeof(APPBARDATA)
-        if ctypes.windll.shell32.SHAppBarMessage(5, ctypes.byref(apt)):
-            r = apt.rc; return (r.left, r.top, r.right, r.bottom)
-    except Exception: pass
-    return None
+        n = max(1, round(60.0 / max(float(interval), 0.1)))
+    except (TypeError, ValueError):
+        n = 30
+    return counter >= n
+
 
 def _find_font(size=22, bold=False):
-    """寻找可用字体。bold=True 优先 Bold 版，回退 Regular。"""
-    names = ("arialbd.ttf","segoeuib.ttf","msyhbd.ttc") if bold else ("arial.ttf","segoeui.ttf","msyh.ttc")
+    """寻找可用字体。bold=True 优先 Bold 版，回退 Regular。
+
+    结果按 (size, bold) 缓存：托盘图标每 200ms 渲染一次，重复打开字体文件
+    会造成无谓的磁盘 IO。
+    """
+    key = (size, bold)
+    cached = _FONT_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    candidates = (("arialbd.ttf","segoeuib.ttf","msyhbd.ttc") if bold else ())
+    names = candidates + ("arial.ttf","segoeui.ttf","msyh.ttc")
+    dirs = [r"C:\Windows\Fonts", os.path.expanduser(r"~\.fonts")]
     for name in names:
-        for dir_ in [r"C:\Windows\Fonts", os.path.expanduser(r"~\.fonts")]:
+        for dir_ in dirs:
             p = os.path.join(dir_, name)
             if os.path.exists(p):
-                try: return ImageFont.truetype(p, size)
-                except Exception: pass
-    # 所有Bold字体都找不到时，回退Regular
-    for name in ("arial.ttf","segoeui.ttf","msyh.ttc"):
-        for dir_ in [r"C:\Windows\Fonts", os.path.expanduser(r"~\.fonts")]:
-            p = os.path.join(dir_, name)
-            if os.path.exists(p):
-                try: return ImageFont.truetype(p, size)
-                except Exception: pass
-    try: return ImageFont.truetype("arial.ttf", size)
-    except Exception: return ImageFont.load_default()
+                try:
+                    font = ImageFont.truetype(p, size)
+                    _FONT_CACHE[key] = font
+                    return font
+                except Exception:
+                    pass
+    try:
+        font = ImageFont.truetype("arial.ttf", size)
+    except Exception:
+        font = ImageFont.load_default()
+    _FONT_CACHE[key] = font
+    return font
 
 
 # ---------------------------------------------------------------------------
@@ -401,26 +419,28 @@ class GoldTaskbarDoubleLine:
     _TRAY_LINE1_Y_RATIO    = 0.28   # 第一行垂直中心位置
     _TRAY_LINE2_Y_RATIO    = 0.72   # 第二行垂直中心位置
 
+    # 卡片价格文字字号
+    _VALUE_FONT_SIZE       = 17
+    _FLASH_VALUE_FONT_SIZE = 15
+
     def __init__(self):
         self.config = self.load_config()
         self.root   = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-        self.root.attributes("-alpha", float(self.config.get("opacity", 0.55)))
+        self.root.attributes("-alpha", float(self.config.get("opacity", 0.80)))
 
         self.bg_color              = "#000000"
-        self.card_color            = "#101218"
-        self.card_border           = "#2A2D36"
-        self.card_highlight_color  = "#1B1F2A"
-        self.card_border_highlight = "#3A4150"
+        self.card_color            = "#12151E"
+        self.card_border           = "#333A4D"
+        self.card_highlight_color  = "#1B2030"
+        self.card_border_highlight = "#4A5570"
         self.text_color            = "#F5F5F7"
         self.muted_color           = "#9AA0A6"
         self.up_color              = "#FF3B30"
         self.down_color            = "#00C853"
         self.font_family           = "Segoe UI"
-        self.text_font_size        = 10
-        self.flash_text_font_size  = 12
-        self.arrow_font_size       = 15
+        self.flash_text_font_size  = self._FLASH_VALUE_FONT_SIZE
         self.card_width            = 220
         self.card_height           = 130
         self.corner_radius         = 15
@@ -452,16 +472,16 @@ class GoldTaskbarDoubleLine:
 
         # 卡片：浙商 + 金价 + 涨跌箭头（单行居中布局）
         self.au_icon = self.canvas.create_text(
-            8, 28, text="浙商", fill="#4F8EF7",
+            8, 28, text="浙商", fill="#E8B84B",
             font=(self.font_family, 12, "bold"), anchor="w")
         self.root.update_idletasks()
         au_label_right = self.canvas.bbox(self.au_icon)[2] + 8
         self.au_value_text = self.canvas.create_text(
             au_label_right, 28, text="--", fill=self.text_color,
-            font=(self.font_family, 14, "bold"), anchor="w")
+            font=(self.font_family, self._VALUE_FONT_SIZE, "bold"), anchor="w")
         self.au_arrow_text = self.canvas.create_text(
             self.card_width - 8, 28, text="•", fill=self.muted_color,
-            font=(self.font_family, 15, "bold"), anchor="e")
+            font=(self.font_family, 16, "bold"), anchor="e")
 
         self._bind_drag()
 
@@ -606,18 +626,20 @@ class GoldTaskbarDoubleLine:
         """生成托盘图标：超大两行金价数字，粗描边确保缩放后清晰可读。"""
         sz = self.TRAY_ICON_SIZE
 
-        # 涨跌配色
+        # 涨跌配色（提亮饱和度，在小尺寸托盘下更醒目）
         if price is not None and prev_price is not None and price > prev_price:
-            bg, fg = (145,20,20),  (255,255,255)    # 红底白字（降亮度提升对比）
+            bg, fg = (172,38,44),  (255,255,255)    # 红底白字
         elif price is not None and prev_price is not None and price < prev_price:
-            bg, fg = (18,100,45),  (255,255,255)    # 绿底白字（降亮度提升对比）
+            bg, fg = (26,124,62),  (255,255,255)    # 绿底白字
         else:
-            bg, fg = (40,40,55),   (255,255,255)    # 深灰底白字
+            bg, fg = (52,57,76),   (255,255,255)    # 蓝灰底白字
 
         # 透明背景 + 圆形裁剪
         img = Image.new("RGBA", (sz, sz), (0,0,0,0))
         draw = ImageDraw.Draw(img)
         draw.ellipse([(0,0),(sz-1,sz-1)], fill=bg+(255,))
+        # 内圈高光环：提升图标层次感（不影响取样点 (4,128) 与四角透明）
+        draw.ellipse([9, 9, sz-10, sz-10], outline=(255,255,255,34), width=5)
 
         # 两行数字
         if price is not None:
@@ -743,13 +765,6 @@ class GoldTaskbarDoubleLine:
             p_min -= 0.5
             p_max += 0.5
 
-        # 昨收价虚线参考线
-        if pre_close is not None and p_min <= pre_close <= p_max:
-            ref_y = area_y2 - (pre_close - p_min) / (p_max - p_min) * area_h
-            item = self.canvas.create_line(area_x1, ref_y, area_x2, ref_y,
-                                           fill=self.muted_color, dash=(2, 2), width=1)
-            self._sparkline_item_ids.append(item)
-
         # 生成折线坐标点
         coords = []
         for i, p in enumerate(prices):
@@ -758,7 +773,7 @@ class GoldTaskbarDoubleLine:
             coords.extend([x, y])
 
         if len(coords) < 4:
-            return
+            return  # pragma: no cover - 防御性守卫：data>=2 时坐标数恒>=4
 
         # 折线颜色：最新价 vs 昨收价
         last_price = prices[-1]
@@ -767,8 +782,27 @@ class GoldTaskbarDoubleLine:
         else:
             line_color = self.muted_color
 
-        item = self.canvas.create_line(*coords, fill=line_color, width=1.5, smooth=True)
+        # 折线下方区域填充：营造走势图质感（Tk 不支持 alpha，用贴近底色的深蓝灰）
+        poly = self.canvas.create_polygon(
+            *(coords + [area_x2, area_y2, area_x1, area_y2]),
+            fill="#1A2131", outline="")
+        self._sparkline_item_ids.append(poly)
+
+        # 昨收价虚线参考线
+        if pre_close is not None and p_min <= pre_close <= p_max:
+            ref_y = area_y2 - (pre_close - p_min) / (p_max - p_min) * area_h
+            item = self.canvas.create_line(area_x1, ref_y, area_x2, ref_y,
+                                           fill=self.muted_color, dash=(2, 2), width=1)
+            self._sparkline_item_ids.append(item)
+
+        item = self.canvas.create_line(*coords, fill=line_color, width=2, smooth=True)
         self._sparkline_item_ids.append(item)
+
+        # 最新价端点圆点：强化走势方向感
+        x_end, y_end = coords[-2], coords[-1]
+        dot = self.canvas.create_oval(x_end - 3, y_end - 3, x_end + 3, y_end + 3,
+                                      fill=line_color, outline="")
+        self._sparkline_item_ids.append(dot)
 
         # 标注最高/最低价
         try:
@@ -784,12 +818,17 @@ class GoldTaskbarDoubleLine:
 
     def _apply_card_style(self, fill_color, border_color):
         for it in self.card_fill_items:   self.canvas.itemconfig(it, fill=fill_color,   outline=fill_color)
-        for it in self.card_border_items: self.canvas.itemconfig(it, fill=border_color, outline=border_color)
+        for it in self.card_border_items:
+            # 分隔线是 create_line，不支持 -outline，否则抛 TclError 并中断闪烁复位
+            if self.canvas.type(it) == "line":
+                self.canvas.itemconfig(it, fill=border_color)
+            else:
+                self.canvas.itemconfig(it, fill=border_color, outline=border_color)
 
     def _reset_flash_style(self):
         self.canvas.itemconfig(self.au_value_text, fill=self.text_color,
-                               font=(self.font_family, 14, "bold"))
-        self.canvas.itemconfig(self.au_icon, fill="#4F8EF7",
+                               font=(self.font_family, self._VALUE_FONT_SIZE, "bold"))
+        self.canvas.itemconfig(self.au_icon, fill="#E8B84B",
                                font=(self.font_family, 12, "bold"))
         self._apply_card_style(self.card_color, self.card_border)
         self.flash_active = False
@@ -968,7 +1007,7 @@ class GoldTaskbarDoubleLine:
             if rem <= 0: self._reset_flash_style(); self._flash_after_id = None; return
             use = rem % 2 == 0
             self.canvas.itemconfig(self.au_value_text, fill=color if use else self.text_color,
-                                   font=(self.font_family, self.flash_text_font_size if use else 14, "bold"))
+                                   font=(self.font_family, self.flash_text_font_size if use else self._VALUE_FONT_SIZE, "bold"))
             if use: self._apply_card_style(self.card_highlight_color, self.card_border_highlight)
             else:   self._apply_card_style(self.card_color, self.card_border)
             self._flash_after_id = self.root.after(self.extreme_flash_interval_ms, lambda: toggle(rem-1))
@@ -1001,12 +1040,14 @@ class GoldTaskbarDoubleLine:
             try: self._draw_sparkline()
             except Exception: pass
 
-        # ★ 动态托盘图标：每 200ms 检查，金价变化时生成新图标替换
+        # ★ 动态托盘图标：每 200ms 检查，金价变化时才重建图标
         if self.tray is not None and self.tray.visible:
             try:
-                new_img = self._make_tray_icon(price=au, prev_price=prev)
-                self.tray.icon = new_img
-                self.tray.title = f"浙商金 {au:.2f}" if au is not None else "浙商金"
+                sig = (au, prev)
+                if sig != getattr(self, "_tray_sig", None):
+                    self.tray.icon = self._make_tray_icon(price=au, prev_price=prev)
+                    self.tray.title = f"浙商金 {au:.2f}" if au is not None else "浙商金"
+                    self._tray_sig = sig
             except Exception:
                 pass
 
@@ -1027,7 +1068,7 @@ class GoldTaskbarDoubleLine:
                     self._fetch_fail_count += 1
                 # 每60秒刷新一次分时走势数据
                 ts_counter += 1
-                if ts_counter >= max(1, int(self.interval)):
+                if timesharing_needed(ts_counter, self.interval):
                     self._fetch_timesharing()
                     ts_counter = 0
             except KeyboardInterrupt: raise

@@ -1,0 +1,10 @@
+[run]
+# Omit the temporary aueye.py copy executed via runpy by TestRunAndMain
+# so it does not pollute coverage data.
+omit =
+    */aueye_main_*/aueye.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
